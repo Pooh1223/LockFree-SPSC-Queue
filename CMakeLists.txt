@@ -18,6 +18,8 @@ find_package(Threads REQUIRED)
 
 # 6. 定義要產出的執行檔名稱，以及它的來源原始碼
 add_executable(spsc_test src/main.cpp)
+add_executable(spsc_perf src/perf_test.cpp)
 
 # 7. 連結執行緒函式庫到你的執行檔
 target_link_libraries(spsc_test PRIVATE Threads::Threads)
+target_link_libraries(spsc_perf PRIVATE Threads::Threads)

@@ -12,24 +12,32 @@ public:
     
     // producer
     bool push(const T& val){
-        size_t cur_tail = tail.load();
-        
+        size_t cur_tail = tail.load(std::memory_order_relaxed);
+        size_t cur_head = head.load(std::memory_order_acquire);
+
+        // size_t cur_tail = tail.load();
+        // size_t cur_head = head.load();
+
         // ring array is full
-        if(cur_tail - head.load() == Capacity){
+        if(cur_tail - cur_head == Capacity){
             return false;
         }
 
         data_[cur_tail & (Capacity - 1)] = val;
         
         size_t next_tail = (cur_tail + 1);
-        tail.store(next_tail);
+        // tail.store(next_tail);
+        tail.store(next_tail,std::memory_order_release);
         return true;
     }
 
     // consumer
     bool pop(T& val){
-        size_t cur_head = head.load();
-        size_t cur_tail = tail.load();
+        size_t cur_head = head.load(std::memory_order_relaxed);
+        size_t cur_tail = tail.load(std::memory_order_acquire);
+
+        // size_t cur_head = head.load();
+        // size_t cur_tail = tail.load();
         
         // array is empty
         if(cur_head == cur_tail){
@@ -39,7 +47,8 @@ public:
         val = data_[cur_head & (Capacity - 1)];
 
         size_t next_head = (cur_head + 1);
-        head.store(next_head);
+        head.store(next_head,std::memory_order_release);
+        // head.store(next_head);
         return true;
     }
 
