@@ -13,15 +13,15 @@ public:
     // producer
     bool push(const T& val){
         size_t cur_tail = tail.load();
-        size_t next_tail = (cur_tail + 1) & (Capacity - 1);
         
         // ring array is full
-        if(next_tail == head.load()){
+        if(cur_tail - head.load() == Capacity){
             return false;
         }
 
-        data_[cur_tail] = val;
-
+        data_[cur_tail & (Capacity - 1)] = val;
+        
+        size_t next_tail = (cur_tail + 1);
         tail.store(next_tail);
         return true;
     }
@@ -36,9 +36,9 @@ public:
             return false;
         }
 
-        val = data_[cur_head];
+        val = data_[cur_head & (Capacity - 1)];
 
-        size_t next_head = (cur_head + 1) & (Capacity - 1);
+        size_t next_head = (cur_head + 1);
         head.store(next_head);
         return true;
     }
