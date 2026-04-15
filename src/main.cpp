@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cassert>
-#include "spsc_ring_buffer.hpp"
+#include "spsc_queue.hpp"
 
 int main() {
     SPSCQueue<int, 4> queue;

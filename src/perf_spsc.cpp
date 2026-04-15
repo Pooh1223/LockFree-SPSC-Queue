@@ -2,7 +2,7 @@
 #include <thread>
 #include <vector>
 #include <chrono>
-#include "spsc_ring_buffer.hpp"
+#include "spsc_queue.hpp"
 
 const size_t COUNT = 100000000;
 
