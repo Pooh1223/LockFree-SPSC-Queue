@@ -27,8 +27,7 @@ public:
                 if (tail_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
                     break;
                 }
-            } 
-            else if (diff < 0) {
+            } else if (diff < 0) {
                 return false; 
             } else {
                 pos = tail_.load(std::memory_order_relaxed);
