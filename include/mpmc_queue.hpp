@@ -13,7 +13,8 @@ public:
         }
     }
 
-    bool push(const T& data) {
+    template<typename U>
+    bool push(U&& data) {
         Slot* slot;
         size_t pos = tail_.load(std::memory_order_relaxed);
 
@@ -34,7 +35,7 @@ public:
             }
         }
 
-        slot -> data = data;
+        slot -> data = std::forward<U>(data);
         slot -> sequence.store(pos + 1, std::memory_order_release);
         
         return true;

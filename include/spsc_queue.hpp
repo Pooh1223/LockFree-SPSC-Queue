@@ -11,7 +11,8 @@ public:
     SPSCQueue() : data_(Capacity),head(0),tail(0){};
     
     // producer
-    bool push(const T& val){
+    template <typename U>
+    bool push(U&& val){
         size_t cur_tail = tail.load(std::memory_order_relaxed);
         size_t cur_head = head.load(std::memory_order_acquire);
 
@@ -23,7 +24,7 @@ public:
             return false;
         }
 
-        data_[cur_tail & (Capacity - 1)] = val;
+        data_[cur_tail & (Capacity - 1)] = std::forward<U>(val);
         
         size_t next_tail = (cur_tail + 1);
         // tail.store(next_tail);
