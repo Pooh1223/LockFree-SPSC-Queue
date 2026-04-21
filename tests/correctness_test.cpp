@@ -1,7 +1,29 @@
 #include <gtest/gtest.h>
 #include <thread>
 #include <set>
+#include <string>
 #include "mpmc_queue.hpp"
+
+struct ComplexItem {
+    int id;
+    std::string name;
+
+    ComplexItem() : id(0), name("") {}
+
+    ComplexItem(int i, std::string n) : id(i), name(std::move(n)) {}
+};
+
+TEST(MPMCQueueTest, EmplaceTest) {
+    MPMCQueue<ComplexItem, 16> queue;
+
+    EXPECT_TRUE(queue.emplace(99, "LEOLIN"));
+
+    ComplexItem result;
+    EXPECT_TRUE(queue.pop(result));
+    
+    EXPECT_EQ(result.id, 99);
+    EXPECT_EQ(result.name, "LEOLIN");
+}
 
 TEST(MPMCQueueTest, ConcurrentPushPop) {
     MPMCQueue<int, 1024> queue;
