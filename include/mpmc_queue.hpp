@@ -1,6 +1,7 @@
 #include <atomic>
 #include <vector>
 #include <stdexcept>
+#include <immintrin.h>
 
 template <typename T, size_t Capacity>
 class MPMCQueue {
@@ -13,7 +14,35 @@ public:
         }
     }
 
-    template<typename U>
+    template <typename... Args>
+    bool emplace(Args&&... args){
+        Slot* slot;
+        size_t pos = tail_.load(std::memory_order_relaxed);
+
+        while (true) {
+            slot = &buffer_[pos & (Capacity - 1)];
+            size_t seq = slot -> sequence.load(std::memory_order_acquire);
+            intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+
+            if (diff == 0) {
+                if (tail_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+                    break;
+                }
+                _mm_pause();
+            } else if (diff < 0) {
+                return false;
+            } else {
+                pos = tail_.load(std::memory_order_relaxed);
+            }
+        }
+
+        slot -> data = T(std::forward<Args>(args)...); 
+    
+        slot -> sequence.store(pos + 1, std::memory_order_release);
+        return true;
+    }
+
+    template <typename U>
     bool push(U&& data) {
         Slot* slot;
         size_t pos = tail_.load(std::memory_order_relaxed);
@@ -28,9 +57,11 @@ public:
                 if (tail_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
                     break;
                 }
+                _mm_pause();
             } else if (diff < 0) {
                 return false; 
             } else {
+                _mm_pause();
                 pos = tail_.load(std::memory_order_relaxed);
             }
         }
@@ -55,10 +86,11 @@ public:
                 if(head_.compare_exchange_weak(pos,pos + 1,std::memory_order_relaxed)){
                     break;
                 }
-
+                _mm_pause();
             } else if(diff < 0){
                 return false;
             } else {
+                _mm_pause();
                 pos = head_.load(std::memory_order_acquire);
             }
         }
@@ -76,7 +108,7 @@ private:
         T data;
     };
 
-    alignas(64) Slot buffer_[Capacity]; 
+    Slot buffer_[Capacity]; 
     alignas(64) std::atomic<size_t> head_{0};
     alignas(64) std::atomic<size_t> tail_{0};
 };

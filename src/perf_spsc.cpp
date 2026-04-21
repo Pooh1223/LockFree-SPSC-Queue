@@ -4,7 +4,7 @@
 #include <chrono>
 #include "spsc_queue.hpp"
 
-const size_t COUNT = 100000000;
+const size_t COUNT = 10000000;
 
 int main() {
     SPSCQueue<size_t, 65536> queue;
