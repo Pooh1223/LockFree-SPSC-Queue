@@ -71,6 +71,7 @@ public:
         
         return true;
     }
+
     bool pop(T& data) {
         Slot* slot;
         size_t pos = head_.load(std::memory_order_relaxed);
@@ -95,7 +96,7 @@ public:
             }
         }
 
-        data = slot -> data;
+        data = std::move(slot -> data);
 
         slot -> sequence.store(pos + Capacity,std::memory_order_release);
 
