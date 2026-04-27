@@ -1,6 +1,7 @@
 #include <atomic>
 #include <vector>
 #include <stdexcept>
+#include <iterator>
 #include <immintrin.h>
 
 template <typename T, size_t Capacity>
@@ -12,6 +13,45 @@ public:
         for (size_t i = 0; i < Capacity; ++i) {
             buffer_[i].sequence.store(i, std::memory_order_relaxed);
         }
+    }
+
+    template <typename Iterator>
+    size_t push_batch(Iterator begin, Iterator end) {
+        size_t n = std::distance(begin, end);
+        if (n == 0) return 0;
+        if (n > Capacity) return 0;
+
+        size_t pos = tail_.load(std::memory_order_relaxed);
+
+        while (true) {
+            size_t head = head_.load(std::memory_order_acquire);
+            
+            if (pos + n > head + Capacity) {
+                return 0; 
+            }
+
+            if (tail_.compare_exchange_weak(pos, pos + n, std::memory_order_relaxed)) {
+                break;
+            }
+            
+            _mm_pause();
+        }
+
+        for (size_t i = 0; i < n; ++i) {
+            size_t actual_pos = pos + i;
+            Slot* slot = &buffer_[actual_pos & (Capacity - 1)];
+
+            while (slot->sequence.load(std::memory_order_acquire) != actual_pos) {
+                _mm_pause();
+            }
+
+            slot -> data = std::move(*begin);
+            ++begin;
+
+            slot -> sequence.store(actual_pos + 1, std::memory_order_release);
+        }
+
+        return n;
     }
 
     template <typename... Args>
@@ -101,6 +141,43 @@ public:
         slot -> sequence.store(pos + Capacity,std::memory_order_release);
 
         return true;
+    }
+
+    template <typename Container>
+    size_t pop_batch(Container& items, size_t n) {
+        if (n == 0) return 0;
+        if (n > Capacity) n = Capacity;
+
+        size_t pos = head_.load(std::memory_order_relaxed);
+
+        while (true) {
+            size_t tail = tail_.load(std::memory_order_acquire);
+            if (pos + n > tail) {
+                size_t available = (tail > pos) ? (tail - pos) : 0;
+                if (available == 0) return 0;
+                n = available;
+            }
+
+            if (head_.compare_exchange_weak(pos, pos + n, std::memory_order_relaxed)) {
+                break;
+            }
+            _mm_pause();
+        }
+
+        for (size_t i = 0; i < n; ++i) {
+            size_t actual_pos = pos + i;
+            Slot* slot = &buffer_[actual_pos & (Capacity - 1)];
+
+            while (slot->sequence.load(std::memory_order_acquire) != actual_pos + 1) {
+                _mm_pause();
+            }
+
+            items.push_back(std::move(slot->data));
+
+            slot->sequence.store(actual_pos + Capacity, std::memory_order_release);
+        }
+
+        return n;
     }
 
 private:
