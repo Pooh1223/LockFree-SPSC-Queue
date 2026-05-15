@@ -22,6 +22,7 @@ public:
         if (n > Capacity) return 0;
 
         size_t pos = tail_.load(std::memory_order_relaxed);
+        int backoff_count = 0;
 
         while (true) {
             size_t head = head_.load(std::memory_order_acquire);
@@ -34,15 +35,18 @@ public:
                 break;
             }
             
-            _mm_pause();
+            // _mm_pause();
+            apply_backoff(backoff_count);
         }
 
         for (size_t i = 0; i < n; ++i) {
             size_t actual_pos = pos + i;
             Slot* slot = &buffer_[actual_pos & (Capacity - 1)];
-
+            
+            int wait_count = 0;
             while (slot->sequence.load(std::memory_order_acquire) != actual_pos) {
-                _mm_pause();
+                // _mm_pause();
+                apply_backoff(wait_count);
             }
 
             slot -> data = std::move(*begin);
@@ -58,6 +62,7 @@ public:
     bool emplace(Args&&... args){
         Slot* slot;
         size_t pos = tail_.load(std::memory_order_relaxed);
+        int backoff_count = 0;
 
         while (true) {
             slot = &buffer_[pos & (Capacity - 1)];
@@ -68,12 +73,14 @@ public:
                 if (tail_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
                     break;
                 }
-                _mm_pause();
+                // _mm_pause();
             } else if (diff < 0) {
                 return false;
             } else {
                 pos = tail_.load(std::memory_order_relaxed);
             }
+
+            apply_backoff(backoff_count);
         }
 
         slot -> data = T(std::forward<Args>(args)...); 
@@ -86,6 +93,7 @@ public:
     bool push(U&& data) {
         Slot* slot;
         size_t pos = tail_.load(std::memory_order_relaxed);
+        int backoff_count = 0;
 
         while (true) {
             slot = &buffer_[pos & (Capacity - 1)];
@@ -97,13 +105,15 @@ public:
                 if (tail_.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
                     break;
                 }
-                _mm_pause();
+                // _mm_pause();
             } else if (diff < 0) {
                 return false; 
             } else {
-                _mm_pause();
+                // _mm_pause();
                 pos = tail_.load(std::memory_order_relaxed);
             }
+
+            apply_backoff(backoff_count);
         }
 
         slot -> data = std::forward<U>(data);
@@ -115,6 +125,7 @@ public:
     bool pop(T& data) {
         Slot* slot;
         size_t pos = head_.load(std::memory_order_relaxed);
+        int backoff_count = 0;
 
         while(true){
             slot = &buffer_[pos & (Capacity - 1)];
@@ -127,13 +138,14 @@ public:
                 if(head_.compare_exchange_weak(pos,pos + 1,std::memory_order_relaxed)){
                     break;
                 }
-                _mm_pause();
+                // _mm_pause();
             } else if(diff < 0){
                 return false;
             } else {
-                _mm_pause();
+                // _mm_pause();
                 pos = head_.load(std::memory_order_acquire);
             }
+            apply_backoff(backoff_count);
         }
 
         data = std::move(slot -> data);
@@ -149,6 +161,7 @@ public:
         if (n > Capacity) n = Capacity;
 
         size_t pos = head_.load(std::memory_order_relaxed);
+        int backoff_count = 0;
 
         while (true) {
             size_t tail = tail_.load(std::memory_order_acquire);
@@ -161,15 +174,18 @@ public:
             if (head_.compare_exchange_weak(pos, pos + n, std::memory_order_relaxed)) {
                 break;
             }
-            _mm_pause();
+            // _mm_pause();
+            apply_backoff(backoff_count);
         }
 
         for (size_t i = 0; i < n; ++i) {
             size_t actual_pos = pos + i;
             Slot* slot = &buffer_[actual_pos & (Capacity - 1)];
+            int wait_count = 0;
 
             while (slot->sequence.load(std::memory_order_acquire) != actual_pos + 1) {
-                _mm_pause();
+                // _mm_pause();
+                apply_backoff(wait_count);
             }
 
             items.push_back(std::move(slot->data));
@@ -185,6 +201,17 @@ private:
         std::atomic<size_t> sequence;
         T data;
     };
+
+    static void apply_backoff(int& backoff_count) {
+        backoff_count++;
+        if (backoff_count < 10) {
+            _mm_pause();
+        } else if (backoff_count < 100) {
+            for (int i = 0; i < 10; ++i) _mm_pause();
+        } else {
+            std::this_thread::yield();
+        }
+    }
 
     Slot buffer_[Capacity]; 
     alignas(64) std::atomic<size_t> head_{0};
